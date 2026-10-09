@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""GitHub Yönetim Paneli - Kurulum (for idris enes yiğit)
+"""GitHub Yönetim Paneli
 
 Yaptıkları:
   1. Bağımlılıkları kontrol eder (tkinter, git, gh) ve eksikse kurmayı önerir.
@@ -287,7 +287,7 @@ def remove_shortcuts():
 
 def kurulum():
     print("=" * 60)
-    print(" Selamun Aleyküm İdris Enes Yiğit! Kuruluma hoş geldin.")
+    print(" Merhaba Kuruluma hoş geldin.")
     print(" Sistem tespit ediliyor ve masaüstü kısayolu oluşturuluyor...")
     print("=" * 60)
     print(f" Sistem: {OS} | Python: {sys.version.split()[0]} | Klasör: {BASE}\n")
