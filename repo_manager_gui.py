@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""GitHub Yönetim Paneli - GUI (for idris enes yiğit)
+"""GitHub Yönetim Paneli - GUI
 
 repo-manager.sh betiğinin grafik arayüzlü sürümü.
 Gereksinimler: python3-tk, git, gh (GitHub CLI, 'gh auth login' yapılmış olmalı)
@@ -116,7 +116,7 @@ def fsize(p):
 class App:
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title("GitHub Yönetim Paneli — for idris enes yiğit")
+        self.root.title("GitHub Yönetim Paneli")
         self.root.geometry("880x760")
         self.root.minsize(780, 620)
         self.apply_theme()
