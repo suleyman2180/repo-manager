@@ -13,6 +13,9 @@ Kullanım:
   python3 kurulum.py -y         # sorulara otomatik "evet"
   python3 kurulum.py --no-deps  # bağımlılık kontrolünü atla
   python3 kurulum.py --kaldir   # oluşturulan kısayolları sil
+
+Kurulum ayrıca git adı/e-postası, varsayılan klasör ve repo görünürlüğünü sorar
+(~/.gh_panel_config), bitince yıldız (star) isteyip proje sayfasını tarayıcıda açar.
 """
 import base64
 import os
@@ -21,6 +24,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import webbrowser
 from pathlib import Path
 
 try:  # Windows konsolunda Türkçe karakterler
@@ -36,6 +40,10 @@ APP_GUI = "GitHub Manager"
 APP_CLI = "GitHub Manager (Terminal)"
 OS = platform.system()
 AUTO_YES = "-y" in sys.argv or "--yes" in sys.argv
+REPO = "suleyman2180/repo-manager"
+REPO_URL = f"https://github.com/{REPO}"
+CONFIG_FILE = Path.home() / ".gh_panel_config"
+CONFIG_KEYS = ("KAYITLI_GIT_NAME", "KAYITLI_GIT_EMAIL", "VARSAYILAN_DIR", "VARSAYILAN_VISIBILITY")
 
 
 # ----------------------------------------------------------------- yardımcılar
@@ -268,6 +276,110 @@ def mac_shortcuts(desktop):
     return made
 
 
+# ------------------------------------------------------------------ ayarlar
+def load_config():
+    """~/.gh_panel_config dosyasını (repo-manager.sh / GUI ile ortak) kod çalıştırmadan okur."""
+    cfg = {"KAYITLI_GIT_NAME": "", "KAYITLI_GIT_EMAIL": "", "VARSAYILAN_DIR": "",
+           "VARSAYILAN_VISIBILITY": "1"}
+    try:
+        text = CONFIG_FILE.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return cfg
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, val = line.split("=", 1)
+        key = key.strip()
+        if key in cfg:
+            try:
+                parts = shlex.split(val)
+                cfg[key] = parts[0] if parts else ""
+            except ValueError:
+                pass
+    return cfg
+
+
+def save_config(cfg):
+    lines = ["# GitHub Yönetim Paneli Kayıtlı Ayarları"]
+    lines += [f"{k}={shlex.quote(str(cfg.get(k, '')))}" for k in CONFIG_KEYS]
+    CONFIG_FILE.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def ask_text(question, default=""):
+    try:
+        shown = f" [{default}]" if default else ""
+        ans = input(f"{question}{shown}: ").strip()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return default
+    return ans or default
+
+
+def ask_settings():
+    """Panelin ihtiyaç duyduğu bilgileri kurulumda sorar ve kaydeder."""
+    print("\n--- Panel ayarları ---")
+    cfg = load_config()
+    git_name = out_of(["git", "config", "--global", "user.name"])[1] if shutil.which("git") else ""
+    git_mail = out_of(["git", "config", "--global", "user.email"])[1] if shutil.which("git") else ""
+    cfg["KAYITLI_GIT_NAME"] = cfg["KAYITLI_GIT_NAME"] or git_name
+    cfg["KAYITLI_GIT_EMAIL"] = cfg["KAYITLI_GIT_EMAIL"] or git_mail
+
+    if AUTO_YES:
+        info("-y modu: sorular atlandı, mevcut/varsayılan ayarlar kullanılıyor.")
+    else:
+        info("Boş bırakıp Enter'a basarsanız köşeli parantezdeki değer kullanılır.")
+        cfg["KAYITLI_GIT_NAME"] = ask_text("Git kullanıcı adınız", cfg["KAYITLI_GIT_NAME"])
+        cfg["KAYITLI_GIT_EMAIL"] = ask_text("Git e-posta adresiniz", cfg["KAYITLI_GIT_EMAIL"])
+        while True:
+            d = ask_text("Varsayılan proje klasörü (boş = her seferinde sor)", cfg["VARSAYILAN_DIR"])
+            d = os.path.expanduser(d)
+            if not d or Path(d).is_dir():
+                cfg["VARSAYILAN_DIR"] = d
+                break
+            if ask_yes(f"'{d}' bulunamadı. Oluşturulsun mu?"):
+                try:
+                    Path(d).mkdir(parents=True, exist_ok=True)
+                    cfg["VARSAYILAN_DIR"] = d
+                    break
+                except OSError as e:
+                    warn(f"Klasör oluşturulamadı: {e}")
+        while True:
+            v = ask_text("Yeni repolar varsayılan olarak (1: public, 2: private)",
+                         cfg["VARSAYILAN_VISIBILITY"] or "1")
+            if v in ("1", "2"):
+                cfg["VARSAYILAN_VISIBILITY"] = v
+                break
+            warn("Lütfen 1 veya 2 girin.")
+
+    try:
+        save_config(cfg)
+        ok(f"Ayarlar kaydedildi: {CONFIG_FILE}")
+    except OSError as e:
+        warn(f"Ayarlar kaydedilemedi: {e}")
+
+
+# --------------------------------------------------------- star + tarayıcı
+def ask_star_and_open():
+    print("\n--- Proje sayfası ---")
+    # Kullanıcı adına sessizce star verilmez: -y modunda sorulmaz.
+    if not AUTO_YES and shutil.which("gh") and out_of(["gh", "auth", "status"])[0] == 0:
+        if ask_yes(f"Projeyi beğendiysen GitHub'da ⭐ yıldızlamak ister misin? ({REPO})"):
+            rc, _ = out_of(["gh", "api", "-X", "PUT", f"user/starred/{REPO}"])
+            if rc == 0:
+                ok("Teşekkürler, yıldız verildi! ⭐")
+            else:
+                warn("Yıldız verilemedi; sayfadan elle verebilirsiniz.")
+    elif not AUTO_YES:
+        info("Yıldız vermek için sayfada 'Star' düğmesine tıklayabilirsiniz.")
+    info(f"Açılıyor: {REPO_URL}")
+    try:
+        if not webbrowser.open(REPO_URL):
+            warn(f"Tarayıcı açılamadı. Adres: {REPO_URL}")
+    except Exception:  # noqa: BLE001
+        warn(f"Tarayıcı açılamadı. Adres: {REPO_URL}")
+
+
 # --------------------------------------------------------------------- ana akış
 def remove_shortcuts():
     print("\n--- Kısayollar siliniyor ---")
@@ -305,6 +417,8 @@ def kurulum():
     if "--no-deps" not in sys.argv:
         check_deps()
 
+    ask_settings()
+
     print("\n--- Kısayol oluşturma ---")
     try:
         desktop = desktop_dir()
@@ -324,6 +438,8 @@ def kurulum():
     print("\nKurulum tamamlandı. Masaüstündeki 'GitHub Manager' kısayoluna çift tıklayın.")
     if OS == "Linux":
         info("Kısayol simgesi uyarı verirse: sağ tık -> 'Başlatmaya İzin Ver' (Allow Launching).")
+
+    ask_star_and_open()
     return 0
 
 
