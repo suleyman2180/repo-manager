@@ -911,7 +911,7 @@ panel_menu() {
   terminal_hazirla
   local secim=""
   while true; do
-    echo -e "\n${BLUE}${BOLD}=== GitHub Yönetim Paneli (for idris enes yiğit) ===${NC}"
+    echo -e "\n${BLUE}${BOLD}=== GitHub Yönetim Paneli ===${NC}"
     echo -e "1) Yeni Repo Oluştur ve Yükle"
     echo -e "2) Mevcut Repoyu Güncelle (Commit & Push)"
     echo -e "3) Repo Klonla"
