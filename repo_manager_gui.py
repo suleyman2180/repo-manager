@@ -17,6 +17,8 @@ import sys
 import threading
 from pathlib import Path
 
+from licenses import has_license, write_license
+
 try:
     import tkinter as tk
     from tkinter import ttk, filedialog, messagebox, simpledialog, scrolledtext
@@ -290,22 +292,92 @@ class App:
         d = self.cfg.get("VARSAYILAN_DIR", "")
         return d if d and os.path.isdir(d) else ""
 
+    def prompt_license_choice(self, parent=None):
+        """Projede lisans yoksa kullanıcıya 3 açık kaynak lisanstan birini seçtiren diyalog."""
+        dlg = tk.Toplevel(parent or self.root)
+        dlg.title("Lisans Seçimi")
+        dlg.configure(bg=BG)
+        dlg.geometry("450x270")
+        dlg.resizable(False, False)
+        dlg.transient(parent or self.root)
+        dlg.grab_set()
+
+        selected = {"val": None}
+
+        ttk.Label(dlg, text="⚠ Bu projede LİSANS dosyası bulunamadı!",
+                  font=("TkDefaultFont", 11, "bold"), foreground="#e3b341").pack(pady=(15, 6))
+        ttk.Label(dlg, text="Projenize bir açık kaynak lisansı eklemek ister misiniz?",
+                  wraplength=400, justify="center").pack(pady=(0, 12))
+
+        btn_frame = ttk.Frame(dlg)
+        btn_frame.pack(fill="x", padx=30)
+
+        def pick(choice):
+            selected["val"] = choice
+            dlg.destroy()
+
+        ttk.Button(btn_frame, text="1. MIT Lisansı (Önerilen)",
+                   command=lambda: pick("MIT")).pack(fill="x", pady=3)
+        ttk.Button(btn_frame, text="2. Apache 2.0 Lisansı",
+                   command=lambda: pick("Apache-2.0")).pack(fill="x", pady=3)
+        ttk.Button(btn_frame, text="3. GNU GPL v3 Lisansı",
+                   command=lambda: pick("GPL-3.0")).pack(fill="x", pady=3)
+        ttk.Button(btn_frame, text="Lisanssız Devam Et",
+                   command=lambda: pick(None)).pack(fill="x", pady=(10, 5))
+
+        dlg.wait_window()
+        return selected["val"]
+
     def tab_new(self):
         f = self.tab("Yeni Repo")
         d, name, owner = tk.StringVar(value=self.default_dir()), tk.StringVar(), tk.StringVar()
         desc, msg = tk.StringVar(), tk.StringVar(value="İlk commit")
         priv = tk.BooleanVar(value=self.cfg.get("VARSAYILAN_VISIBILITY") == "2")
         readme = tk.BooleanVar(value=True)
+        lic_choice = tk.StringVar(value="Yoksa Sor")
+
         self.path_field(f, 0, "Proje klasörü", d)
         self.field(f, 1, "Repo adı", name)
         self.field(f, 2, "Organizasyon (ops.)", owner)
         self.field(f, 3, "Açıklama (ops.)", desc)
         self.field(f, 4, "Commit mesajı", msg)
-        ttk.Checkbutton(f, text="Gizli (private) repo", variable=priv).grid(row=5, column=1, sticky="w")
-        ttk.Checkbutton(f, text="README.md yoksa oluştur", variable=readme).grid(row=6, column=1, sticky="w")
-        ttk.Button(f, text="Oluştur ve Yükle", command=lambda: self.start(
-            self.t_new, d.get(), name.get().strip(), owner.get().strip(), priv.get(),
-            desc.get().strip(), readme.get(), msg.get().strip())).grid(row=7, column=1, sticky="e", pady=8)
+
+        # Lisans Seçimi
+        ttk.Label(f, text="Lisans").grid(row=5, column=0, sticky="w", padx=6, pady=4)
+        lic_cb = ttk.Combobox(f, textvariable=lic_choice, state="readonly",
+                              values=["Yoksa Sor", "MIT Lisansı", "Apache 2.0 Lisansı", "GNU GPL v3 Lisansı", "Lisanssız"])
+        lic_cb.grid(row=5, column=1, sticky="w", padx=6, pady=4)
+
+        ttk.Checkbutton(f, text="Gizli (private) repo", variable=priv).grid(row=6, column=1, sticky="w")
+        ttk.Checkbutton(f, text="README.md yoksa oluştur", variable=readme).grid(row=7, column=1, sticky="w")
+
+        def on_create():
+            dir_val = clean(d.get())
+            if not dir_val or not os.path.isdir(dir_val):
+                messagebox.showerror("Hata", "Lütfen geçerli bir proje klasörü seçin.")
+                return
+
+            chosen = lic_choice.get()
+            lic_map = {
+                "MIT Lisansı": "MIT",
+                "Apache 2.0 Lisansı": "Apache-2.0",
+                "GNU GPL v3 Lisansı": "GPL-3.0",
+                "Lisanssız": None,
+            }
+
+            final_lic = None
+            if chosen == "Yoksa Sor":
+                if not has_license(dir_val):
+                    final_lic = self.prompt_license_choice()
+            else:
+                final_lic = lic_map.get(chosen)
+
+            self.start(
+                self.t_new, dir_val, name.get().strip(), owner.get().strip(), priv.get(),
+                desc.get().strip(), readme.get(), msg.get().strip(), final_lic
+            )
+
+        ttk.Button(f, text="Oluştur ve Yükle", command=on_create).grid(row=8, column=1, sticky="e", pady=8)
 
     def tab_update(self):
         f = self.tab("Repoyu Güncelle")
@@ -695,7 +767,7 @@ class App:
         for cb in self.repo_boxes:
             cb["values"] = repos
 
-    def t_new(self, d, name, owner, private, desc, readme, msg):
+    def t_new(self, d, name, owner, private, desc, readme, msg, license_type=None):
         d = clean(d)
         if not os.path.isdir(d):
             raise Abort("Dizin bulunamadı.")
@@ -709,6 +781,14 @@ class App:
             return self.t_update(spec, d, msg or "Güncelleme")
         self.sensitive_check(d, not private)
         self.gitignore_and_large(d)
+
+        # Lisans oluşturma
+        if license_type:
+            author = self.cfg.get("KAYITLI_GIT_NAME") or ""
+            lic_file = write_license(d, license_type, author=author)
+            if lic_file:
+                self.log(f"Lisans dosyası ({license_type}) oluşturuldu: LICENSE", "ok")
+
         rd = Path(d) / "README.md"
         if readme and not rd.exists():
             self.write(rd, f"# {name}\n")

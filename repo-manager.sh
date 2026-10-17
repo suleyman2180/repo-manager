@@ -597,6 +597,124 @@ kullanici_repo_sec() {
 }
 
 # -----------------------------------------------------------------------------
+# Lisans Kontrol ve Ekleme Fonksiyonu
+# -----------------------------------------------------------------------------
+lisans_kontrol_ve_ekle() {
+  local target_path="$1"
+  local author="${KAYITLI_GIT_NAME:-$(git config --get user.name 2>/dev/null || echo "")}"
+  [[ -z "$author" ]] && author="Project Contributors"
+  local year
+  year=$(date +"%Y")
+
+  # Lisans dosyası var mı kontrol et
+  local found=0
+  for f in LICENSE LICENSE.md LICENSE.txt LICENCE LICENCE.md; do
+    if [[ -f "$target_path/$f" ]]; then
+      found=1
+      break
+    fi
+  done
+
+  if [[ "$found" -eq 1 ]]; then
+    return 0
+  fi
+
+  echo -e "\n${YELLOW}⚠ Bu projede LİSANS (LICENSE) dosyası bulunamadı.${NC}"
+  echo -e "Açık kaynak veya güvenli paylaşım için bir lisans eklemek ister misiniz?"
+  echo -e "  1) MIT Lisansı (Önerilen - Basit ve İzin Verici)"
+  echo -e "  2) Apache 2.0 Lisansı (Patent Korumalı)"
+  echo -e "  3) GNU GPL v3 Lisansı (Güçlü Açık Kaynak Kalma Zorunluluğu)"
+  echo -e "  4) Lisans ekleme (Lisanssız devam et)"
+
+  local l_choice="1"
+  read -r -p "Lisans seçiminiz [1-4] (Varsayılan: 1): " l_input
+  l_choice="${l_input:-1}"
+
+  case "$l_choice" in
+    1)
+      cat <<EOF > "$target_path/LICENSE"
+MIT License
+
+Copyright (c) $year $author
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+EOF
+      echo -e "${GREEN}✓ MIT Lisansı 'LICENSE' dosyası olarak oluşturuldu.${NC}"
+      ;;
+    2)
+      cat <<EOF > "$target_path/LICENSE"
+                                 Apache License
+                           Version 2.0, January 2004
+                        http://www.apache.org/licenses/
+
+   Copyright $year $author
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+EOF
+      echo -e "${GREEN}✓ Apache 2.0 Lisansı 'LICENSE' dosyası olarak oluşturuldu.${NC}"
+      ;;
+    3)
+      cat <<EOF > "$target_path/LICENSE"
+                    GNU GENERAL PUBLIC LICENSE
+                       Version 3, 29 June 2007
+
+ Copyright (C) $year $author
+
+ Everyone is permitted to copy and distribute verbatim copies
+ of this license document, but changing it is not allowed.
+
+                            Preamble
+
+  The GNU General Public License is a free, copyleft license for
+software and other kinds of works.
+  This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+  This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+EOF
+      echo -e "${GREEN}✓ GNU GPL v3 Lisansı 'LICENSE' dosyası olarak oluşturuldu.${NC}"
+      ;;
+    *)
+      echo -e "${YELLOW}Lisans eklenmedi, devam ediliyor.${NC}"
+      ;;
+  esac
+}
+
+# -----------------------------------------------------------------------------
 # Modül 1: Yeni Repo (Kayıtlı Görünürlük Tercihi Kullanılıyor)
 # -----------------------------------------------------------------------------
 yeni_repo_olustur() {
@@ -653,6 +771,11 @@ yeni_repo_olustur() {
   if [[ "$add_readme" -eq 1 ]]; then
     echo "# $repo_name" > README.md
     echo -e "${GREEN}README.md oluşturuldu.${NC}"
+  fi
+
+  # Lisans Kontrolü ve Seçimi
+  if [[ "$DRY_RUN" -eq 0 ]]; then
+    lisans_kontrol_ve_ekle "$target_path"
   fi
 
   local commit_msg="${OPT_MSG:-"İlk commit"}"
